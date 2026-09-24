@@ -1,0 +1,1362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTH-IT-06 · Industrial ToD Tariff & Peak-Shaving Dashboard</title>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-primary: #090d16;
+            --bg-card: #121826;
+            --border-color: #222f46;
+            --accent-blue: #38bdf8;
+            --accent-green: #22c55e;
+            --accent-yellow: #eab308;
+            --accent-orange: #f59e0b;
+            --accent-red: #ef4444;
+            --accent-purple: #a855f7;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-main);
+            margin: 0;
+            padding: 24px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 1400px;
+            margin: 0 auto 24px auto;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 16px;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 1.6rem;
+            color: var(--accent-blue);
+        }
+
+        .badge-pill {
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: bold;
+            letter-spacing: 0.5px;
+            display: inline-block;
+            transition: all 0.3s ease;
+        }
+
+        .bg-normal { background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid #22c55e; }
+        .bg-risk { background: rgba(234, 179, 8, 0.2); color: #fde047; border: 1px solid #eab308; }
+        .bg-shedding { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid #ef4444; }
+        .bg-override { background: rgba(168, 85, 247, 0.2); color: #c084fc; border: 1px solid #a855f7; }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 16px;
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 2.3fr 1fr;
+            gap: 20px;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            position: relative;
+        }
+
+        .metric-label {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 6px;
+        }
+
+        .metric-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+        }
+
+        .metric-sub {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        .device-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+        }
+
+        .device-card {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 16px;
+            position: relative;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+
+        .device-card:hover {
+            border-color: var(--accent-blue);
+        }
+
+        .device-card.critical {
+            border-left: 4px solid var(--accent-orange);
+        }
+
+        .device-card.shedded {
+            border-left: 4px solid var(--accent-red);
+            opacity: 0.75;
+        }
+
+        .device-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .device-name {
+            font-weight: 600;
+            font-size: 1.05rem;
+        }
+
+        .gpio-tag {
+            background: rgba(56, 189, 248, 0.15);
+            color: var(--accent-blue);
+            font-size: 0.7rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+            border: 1px solid rgba(56, 189, 248, 0.3);
+        }
+
+        .btn {
+            background: #1e293b;
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            padding: 8px 14px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s, transform 0.1s;
+        }
+
+        .btn:hover {
+            background: #334155;
+            border-color: #475569;
+        }
+
+        .btn:active {
+            transform: scale(0.98);
+        }
+
+        .btn-warning {
+            background: rgba(234, 179, 8, 0.15);
+            border-color: var(--accent-yellow);
+            color: #fde047;
+        }
+        .btn-warning:hover { background: rgba(234, 179, 8, 0.3); }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.15);
+            border-color: var(--accent-red);
+            color: #fca5a5;
+        }
+        .btn-danger:hover { background: rgba(239, 68, 68, 0.3); }
+
+        .btn-success {
+            background: rgba(34, 197, 94, 0.15);
+            border-color: var(--accent-green);
+            color: #86efac;
+        }
+        .btn-success:hover { background: rgba(34, 197, 94, 0.3); }
+
+        .btn-purple {
+            background: rgba(168, 85, 247, 0.15);
+            border-color: var(--accent-purple);
+            color: #d8b4fe;
+        }
+        .btn-purple:hover { background: rgba(168, 85, 247, 0.3); }
+
+        .btn-blue {
+            background: rgba(56, 189, 248, 0.15);
+            border-color: var(--accent-blue);
+            color: #7dd3fc;
+        }
+        .btn-blue:hover { background: rgba(56, 189, 248, 0.3); }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.5px;
+            background: rgba(15, 23, 42, 0.4);
+        }
+
+        tr:hover td {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .score-highlight {
+            font-weight: bold;
+            color: var(--accent-yellow);
+        }
+
+        /* Interactive Tariff Cards */
+        .tariff-cards-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 14px;
+            margin-top: 10px;
+        }
+
+        .tariff-card {
+            background: rgba(15, 23, 42, 0.7);
+            border: 2px solid var(--border-color);
+            border-radius: 10px;
+            padding: 14px 16px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .tariff-card:hover {
+            border-color: #475569;
+            transform: translateY(-2px);
+            background: rgba(30, 41, 59, 0.6);
+        }
+
+        .tariff-card.active {
+            border-color: var(--accent-blue);
+            background: rgba(56, 189, 248, 0.08);
+            box-shadow: 0 0 16px rgba(56, 189, 248, 0.2);
+        }
+
+        .tariff-card.active::after {
+            content: "ACTIVE";
+            position: absolute;
+            top: 10px;
+            right: 12px;
+            background: var(--accent-blue);
+            color: #090d16;
+            font-size: 0.65rem;
+            font-weight: 800;
+            padding: 2px 7px;
+            border-radius: 10px;
+            letter-spacing: 0.5px;
+        }
+
+        .tariff-card-title {
+            font-weight: 700;
+            font-size: 0.95rem;
+            color: var(--text-main);
+            margin-bottom: 4px;
+        }
+
+        .tariff-card-rate {
+            font-size: 1.25rem;
+            font-weight: 800;
+            color: var(--accent-green);
+            margin: 4px 0;
+        }
+
+        .tariff-card-desc {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            line-height: 1.35;
+        }
+
+        .tariff-card-demand {
+            font-size: 0.72rem;
+            color: var(--accent-purple);
+            margin-top: 6px;
+            font-weight: 600;
+        }
+
+        /* Peak Cap Slider & Controls */
+        .cap-control-wrapper {
+            margin-top: 10px;
+        }
+
+        .cap-slider-row {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-top: 6px;
+        }
+
+        .cap-slider {
+            flex: 1;
+            height: 8px;
+            border-radius: 4px;
+            background: #1e293b;
+            outline: none;
+            -webkit-appearance: none;
+            cursor: pointer;
+        }
+
+        .cap-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--accent-blue);
+            cursor: pointer;
+            box-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
+            transition: transform 0.15s;
+        }
+
+        .cap-slider::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+
+        .cap-presets-row {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .preset-chip {
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid var(--border-color);
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            padding: 4px 10px;
+            border-radius: 14px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .preset-chip:hover {
+            border-color: var(--accent-blue);
+            color: var(--text-main);
+        }
+
+        .preset-chip.active {
+            background: rgba(56, 189, 248, 0.2);
+            border-color: var(--accent-blue);
+            color: var(--accent-blue);
+        }
+
+        /* Live Impact Strip */
+        .impact-strip {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            background: rgba(15, 23, 42, 0.9);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 10px 16px;
+            margin-top: 14px;
+        }
+
+        .impact-item-label {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .impact-item-val {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--text-main);
+            margin-top: 2px;
+        }
+
+        /* Blockchain Styling */
+        .blockchain-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 14px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .chain-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(34, 197, 94, 0.15);
+            color: #4ade80;
+            border: 1px solid rgba(34, 197, 94, 0.4);
+            padding: 4px 10px;
+            border-radius: 16px;
+            font-size: 0.75rem;
+            font-weight: 700;
+        }
+
+        .hash-code {
+            font-family: 'Courier New', monospace;
+            background: rgba(0, 0, 0, 0.35);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            color: var(--accent-blue);
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            display: inline-block;
+            cursor: pointer;
+        }
+
+        .action-tag {
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            display: inline-block;
+        }
+
+        .tag-shed { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid #ef4444; }
+        .tag-dim { background: rgba(234, 179, 8, 0.2); color: #fde047; border: 1px solid #eab308; }
+        .tag-restore { background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid #22c55e; }
+        .tag-genesis { background: rgba(168, 85, 247, 0.2); color: #c084fc; border: 1px solid #a855f7; }
+        .tag-override { background: rgba(56, 189, 248, 0.2); color: #38bdf8; border: 1px solid #38bdf8; }
+        .tag-spike { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid #f59e0b; }
+
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(4px);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            padding: 20px;
+        }
+
+        .modal-content {
+            background: #121826;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            width: 100%;
+            max-width: 720px;
+            max-height: 85vh;
+            overflow-y: auto;
+            padding: 24px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+            position: relative;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 12px;
+            margin-bottom: 16px;
+        }
+
+        .modal-header h3 {
+            margin: 0;
+            color: var(--accent-blue);
+            font-size: 1.25rem;
+        }
+
+        .close-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+        .close-btn:hover { color: white; }
+
+        /* Toast feedback */
+        #toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: #1e293b;
+            color: #38bdf8;
+            border: 1px solid #38bdf8;
+            padding: 10px 18px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+            display: none;
+            z-index: 999;
+            transition: all 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="toast"></div>
+
+    <!-- Cryptographic Block Inspector Modal -->
+    <div class="modal-overlay" id="blockModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalBlockTitle">🛡️ Cryptographic Block Inspector</h3>
+                <button class="close-btn" onclick="closeModal('blockModal')">&times;</button>
+            </div>
+            <div id="modalBlockBody" style="font-size: 0.88rem; line-height: 1.6;"></div>
+            <div style="margin-top: 18px; text-align: right;">
+                <button class="btn btn-blue" onclick="closeModal('blockModal')">Close Inspector</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Blockchain Verification Modal -->
+    <div class="modal-overlay" id="verifyModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>🔍 SHA-256 Blockchain Ledger Verification</h3>
+                <button class="close-btn" onclick="closeModal('verifyModal')">&times;</button>
+            </div>
+            <div id="modalVerifyBody" style="font-size: 0.88rem; line-height: 1.6;">
+                <p>Verifying full cryptographic SHA-256 hash chaining from Genesis block...</p>
+            </div>
+            <div style="margin-top: 18px; text-align: right;">
+                <button class="btn btn-success" onclick="closeModal('verifyModal')">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="header">
+        <div>
+            <h1>HTH-IT-06 · Industrial ToD Tariff &amp; Peak-Shaving System</h1>
+            <div style="color: var(--text-muted); font-size: 0.85rem; margin-top: 4px;">
+                ESP32 Hardware Closed-Loop Telemetry &amp; Shed-Score Predictive Peak-Limiting Engine
+            </div>
+        </div>
+        <div style="display: flex; gap: 10px; align-items: center;">
+            <span class="badge-pill bg-normal" id="system-status-badge">SYSTEM STATUS: NORMAL</span>
+            <span class="badge-pill" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid #38bdf8;" id="tod-slot-badge">NORMAL HOURS</span>
+        </div>
+    </div>
+
+    <div class="container">
+
+        <!-- System KPI Cards -->
+        <div class="kpi-grid">
+            <div class="card">
+                <div class="metric-label">Active Power Demand</div>
+                <div class="metric-value" style="color: var(--accent-blue);" id="kpi-total-power">0.0 W</div>
+                <div class="metric-sub" id="kpi-rail-voltage">Rail: 12.00 V</div>
+            </div>
+            <div class="card">
+                <div class="metric-label">Predicted Near-Peak</div>
+                <div class="metric-value" style="color: var(--accent-yellow);" id="kpi-predicted-power">0.0 W</div>
+                <div class="metric-sub" id="kpi-cap-limit">Cap: 45.0 W</div>
+            </div>
+            <div class="card">
+                <div class="metric-label">Total Energy Consumed</div>
+                <div class="metric-value" style="color: var(--accent-orange);" id="kpi-kwh-consumed">0.0000 kWh</div>
+                <div class="metric-sub" id="kpi-cycle-power">Real-Time Integration</div>
+            </div>
+            <div class="card">
+                <div class="metric-label">Total Electricity Cost</div>
+                <div class="metric-value" style="color: #f87171;" id="kpi-cost-consumed">₹0.0000</div>
+                <div class="metric-sub" id="kpi-active-rate">Rate: ₹7.500 / kWh</div>
+            </div>
+            <div class="card">
+                <div class="metric-label">Accumulated Tariff Savings</div>
+                <div class="metric-value" style="color: var(--accent-green);" id="kpi-cost-saved">₹0.0000</div>
+                <div class="metric-sub" id="kpi-energy-saved">0.0000 kWh saved</div>
+            </div>
+        </div>
+
+        <!-- Tariff & Peak-Cap Control Center -->
+        <div class="card">
+            <div class="metric-label">Industrial Tariff Schedule &amp; Peak Cap Control Center</div>
+            
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px;">
+                Select Industrial Tariff Schedule:
+            </div>
+            <div class="tariff-cards-grid">
+                <!-- HT-I Industrial Card -->
+                <div class="tariff-card active" id="tariff-card-HT-I" onclick="selectTariff('HT-I')">
+                    <div>
+                        <div class="tariff-card-title">HT-I Industrial</div>
+                        <div class="tariff-card-rate">₹7.50<span style="font-size: 0.75rem; color: var(--text-muted);"> / unit base</span></div>
+                        <div class="tariff-card-desc">ToD slots (+25% Peak / -5% Night Rebate). High tension manufacturing.</div>
+                    </div>
+                    <div class="tariff-card-demand">Demand Charge: ₹608 / kVA / month</div>
+                </div>
+
+                <!-- LT-IIIB Industrial Card -->
+                <div class="tariff-card" id="tariff-card-LT-IIIB" onclick="selectTariff('LT-IIIB')">
+                    <div>
+                        <div class="tariff-card-title">LT-IIIB Industrial</div>
+                        <div class="tariff-card-rate">₹8.25<span style="font-size: 0.75rem; color: var(--text-muted);"> / unit flat</span></div>
+                        <div class="tariff-card-desc">Small-medium manufacturing &amp; Smart ToD (+15% Peak).</div>
+                    </div>
+                    <div class="tariff-card-demand">Demand Charge: ₹170 / kW / month</div>
+                </div>
+
+                <!-- LT-V Commercial Card -->
+                <div class="tariff-card" id="tariff-card-LT-V" onclick="selectTariff('LT-V')">
+                    <div>
+                        <div class="tariff-card-title">LT-V Commercial</div>
+                        <div class="tariff-card-rate">₹10.45<span style="font-size: 0.75rem; color: var(--text-muted);"> / unit flat</span></div>
+                        <div class="tariff-card-desc">Commercial establishments, offices &amp; IT service facilities.</div>
+                    </div>
+                    <div class="tariff-card-demand">Demand Charge: ₹350 / kW / month</div>
+                </div>
+            </div>
+
+            <!-- Live Tariff Impact Strip -->
+            <div class="impact-strip">
+                <div>
+                    <div class="impact-item-label">Active ToD Rate</div>
+                    <div class="impact-item-val" style="color: var(--accent-green);" id="impact-active-rate">₹7.500 / kWh</div>
+                </div>
+                <div>
+                    <div class="impact-item-label">Hourly Demand Cost</div>
+                    <div class="impact-item-val" style="color: var(--accent-yellow);" id="impact-hourly-cost">₹0.313 / hr</div>
+                </div>
+                <div>
+                    <div class="impact-item-label">Monthly Demand Charge</div>
+                    <div class="impact-item-val" style="color: var(--accent-purple);" id="impact-demand-charge">₹3,040.00 / mo</div>
+                </div>
+                <div>
+                    <div class="impact-item-label">Projected Monthly Bill</div>
+                    <div class="impact-item-val" style="color: var(--accent-blue);" id="impact-projected-bill">₹3,265.71 / mo</div>
+                </div>
+            </div>
+
+            <!-- Peak Cap Interactive Slider & Presets -->
+            <div style="margin-top: 18px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <label style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">
+                        Peak Cap Demand Threshold (Watts):
+                    </label>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 1.2rem; font-weight: bold; color: var(--accent-blue);" id="display-cap-val">45.0 W</span>
+                        <input type="number" id="input-limit" value="45" min="15" max="100" step="1" 
+                               style="width: 70px; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border-color); background: #0b0f19; color: white; text-align: center; font-weight: bold;"
+                               onchange="onNumberInputChange(this.value)">
+                    </div>
+                </div>
+
+                <div class="cap-control-wrapper">
+                    <div class="cap-slider-row">
+                        <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: bold;">15 W</span>
+                        <input type="range" class="cap-slider" id="slider-peak-cap" min="15" max="100" value="45" step="1"
+                               oninput="onSliderDrag(this.value)" onchange="onSliderCommit(this.value)">
+                        <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: bold;">100 W</span>
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px;">
+                        <span style="font-size: 0.75rem; color: var(--text-muted);">Quick Presets:</span>
+                        <div class="cap-presets-row">
+                            <button type="button" class="preset-chip" onclick="applyCapPreset(30)">30 W (Strict)</button>
+                            <button type="button" class="preset-chip active" id="chip-45" onclick="applyCapPreset(45)">45 W (Optimal)</button>
+                            <button type="button" class="preset-chip" onclick="applyCapPreset(60)">60 W (High)</button>
+                            <button type="button" class="preset-chip" onclick="applyCapPreset(80)">80 W (Max)</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Grid: Chart + Hardware Control Panel -->
+        <div class="main-grid">
+            <!-- Real-Time Chart -->
+            <div class="card">
+                <div class="metric-label" style="margin-bottom: 12px;">Live Power Demand vs Peak Cap (Watts)</div>
+                <div style="position: relative; height: 280px;">
+                    <canvas id="powerChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Hardware Simulator & Override Actions -->
+            <div class="card">
+                <div class="metric-label" style="margin-bottom: 12px;">Hardware &amp; Surge Controls</div>
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <button class="btn btn-warning" onclick="triggerLoadSpike()">⚡ Inject 8s Power Surge</button>
+                    <button class="btn btn-danger" onclick="toggleOverride()" id="btn-override">Button GPIO 16: Override Mode</button>
+                    <button class="btn btn-purple" onclick="silenceBuzzer()">Button GPIO 17: Silence Buzzer</button>
+                    <button class="btn btn-success" onclick="restoreAllLoads()">🔄 Restore All Shed Loads</button>
+                </div>
+                
+                <div style="margin-top: 20px; border-top: 1px solid var(--border-color); padding-top: 12px;">
+                    <div style="font-size: 0.8rem; color: var(--text-muted);">
+                        <strong>Peak Shaving Strategy:</strong> Automated 10% PWM Step-Down on shiftable loads with dynamic hysteresis recovery.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Devices Section -->
+        <div class="card">
+            <div class="metric-label">Device Load Monitoring &amp; Hardware GPIO Mapping</div>
+            <div class="device-grid" id="device-cards-container">
+                <!-- Device Cards Dynamic Injection -->
+            </div>
+        </div>
+
+        <!-- Shed-Score Breakdown & Blockchain-Verified Audit Logs -->
+        <div class="card">
+            <div class="blockchain-header">
+                <div>
+                    <div class="metric-label" style="margin-bottom: 4px;">Shed-Score Decision Engine Audit Logs</div>
+                    <div style="font-size: 0.82rem; color: var(--text-muted); display: flex; align-items: center; gap: 8px;">
+                        <span>Cryptographic Blockchain Ledger</span>
+                        <span class="chain-badge" id="blockchain-live-badge">🛡️ SHA-256 Verified</span>
+                        <span style="color: var(--accent-blue); font-weight: bold;" id="blockchain-block-height">Block #0</span>
+                    </div>
+                </div>
+
+                <!-- Date Filter & Verification Buttons -->
+                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <label for="blockchain-date-filter" style="font-size: 0.78rem; color: var(--text-muted); font-weight: 600;">📅 Date Filter:</label>
+                        <select id="blockchain-date-filter" onchange="onDateFilterChanged(this.value)" 
+                                style="background: #0f172a; color: #f8fafc; border: 1px solid var(--border-color); padding: 5px 10px; border-radius: 6px; font-size: 0.8rem; outline: none;">
+                            <option value="ALL">All Dates (Full Ledger)</option>
+                        </select>
+                    </div>
+
+                    <button class="btn btn-blue" style="font-size: 0.8rem; padding: 6px 12px;" onclick="verifyBlockchainIntegrity()">
+                        🔍 Verify Blockchain
+                    </button>
+                    <button class="btn" style="font-size: 0.8rem; padding: 6px 12px;" onclick="exportImmutableLedger()">
+                        📥 Export JSON
+                    </button>
+                </div>
+            </div>
+
+            <div style="overflow-x: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Block # &amp; SHA-256 Hash</th>
+                            <th>Timestamp</th>
+                            <th>Action Type</th>
+                            <th>Target Device</th>
+                            <th>Shed-Score</th>
+                            <th>Algorithmic Rationale</th>
+                            <th>Demand Relief</th>
+                            <th>Proof</th>
+                        </tr>
+                    </thead>
+                    <tbody id="action-log-rows">
+                        <tr><td colspan="8" style="color: var(--text-muted); text-align: center;">Connecting to Blockchain Audit Engine...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // Safe DOM helper
+        function safeSetText(id, text) {
+            const el = document.getElementById(id);
+            if (el) el.innerText = text;
+        }
+
+        // Toast feedback
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            if (toast) {
+                toast.innerText = msg;
+                toast.style.display = 'block';
+                setTimeout(() => { toast.style.display = 'none'; }, 2400);
+            }
+        }
+
+        function closeModal(id) {
+            const modal = document.getElementById(id);
+            if (modal) modal.style.display = 'none';
+        }
+
+        function openModal(id) {
+            const modal = document.getElementById(id);
+            if (modal) modal.style.display = 'flex';
+        }
+
+        let currentActiveTariff = 'HT-I';
+        let currentPeakCap = 45.0;
+        let isUserAdjustingSlider = false;
+        let selectedBlockchainDate = 'ALL';
+        let fullBlockchainBlocks = [];
+
+        // --- CHART INITIALIZATION ---
+        const maxPoints = 25;
+        const chartData = {
+            labels: [],
+            datasets: [
+                {
+                    label: 'Total Power (W)',
+                    data: [],
+                    borderColor: '#38bdf8',
+                    backgroundColor: 'rgba(56, 189, 248, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.3
+                },
+                {
+                    label: 'Predicted Peak (W)',
+                    data: [],
+                    borderColor: '#eab308',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    tension: 0.3
+                },
+                {
+                    label: 'Peak Cap Limit (W)',
+                    data: [],
+                    borderColor: '#ef4444',
+                    borderWidth: 2,
+                    borderDash: [2, 2],
+                    pointRadius: 0
+                }
+            ]
+        };
+
+        const ctx = document.getElementById('powerChart').getContext('2d');
+        const powerChart = new Chart(ctx, {
+            type: 'line',
+            data: chartData,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                scales: {
+                    x: { grid: { color: '#1e293b' }, ticks: { color: '#94a3b8' } },
+                    y: { 
+                        beginAtZero: true, 
+                        max: 80, 
+                        grid: { color: '#1e293b' }, 
+                        ticks: { color: '#94a3b8' } 
+                    }
+                },
+                plugins: {
+                    legend: { labels: { color: '#f8fafc', boxWidth: 12 } }
+                }
+            }
+        });
+
+        // --- TARIFF SELECTION HANDLER ---
+        async function selectTariff(category) {
+            currentActiveTariff = category;
+            
+            document.querySelectorAll('.tariff-card').forEach(card => card.classList.remove('active'));
+            const activeCard = document.getElementById(`tariff-card-${category}`);
+            if (activeCard) activeCard.classList.add('active');
+
+            try {
+                const res = await fetch('/api/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tariff_category: category })
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    showToast(`⚡ Tariff Updated to ${category}`);
+                    if (data.state) {
+                        applyStateToUI(data.state, data.config || {});
+                    }
+                }
+            } catch (err) {
+                console.error("Tariff update failed:", err);
+            }
+        }
+
+        // --- PEAK CAP CONTROLS ---
+        function onSliderDrag(val) {
+            isUserAdjustingSlider = true;
+            val = parseFloat(val);
+            safeSetText('display-cap-val', `${val.toFixed(1)} W`);
+            const numInput = document.getElementById('input-limit');
+            if (numInput) numInput.value = val;
+            updatePresetChips(val);
+        }
+
+        async function onSliderCommit(val) {
+            isUserAdjustingSlider = false;
+            await sendPeakCapUpdate(parseFloat(val));
+        }
+
+        async function onNumberInputChange(val) {
+            const num = parseFloat(val);
+            if (!isNaN(num) && num >= 15 && num <= 100) {
+                const slider = document.getElementById('slider-peak-cap');
+                if (slider) slider.value = num;
+                safeSetText('display-cap-val', `${num.toFixed(1)} W`);
+                updatePresetChips(num);
+                await sendPeakCapUpdate(num);
+            }
+        }
+
+        async function applyCapPreset(presetVal) {
+            const slider = document.getElementById('slider-peak-cap');
+            const numInput = document.getElementById('input-limit');
+            if (slider) slider.value = presetVal;
+            if (numInput) numInput.value = presetVal;
+            safeSetText('display-cap-val', `${parseFloat(presetVal).toFixed(1)} W`);
+            updatePresetChips(presetVal);
+            await sendPeakCapUpdate(presetVal);
+        }
+
+        function updatePresetChips(val) {
+            document.querySelectorAll('.preset-chip').forEach(chip => chip.classList.remove('active'));
+            const exactChip = document.getElementById(`chip-${val}`);
+            if (exactChip) exactChip.classList.add('active');
+        }
+
+        async function sendPeakCapUpdate(capWatts) {
+            try {
+                const res = await fetch('/api/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ peak_cap_watts: capWatts })
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    showToast(`🎯 Peak Cap set to ${capWatts}W`);
+                    currentPeakCap = capWatts;
+                }
+            } catch (err) {
+                console.error("Peak cap update error:", err);
+            }
+        }
+
+        // --- BLOCKCHAIN DATE FILTERING & ACTIONS ---
+        async function fetchBlockchainLedger() {
+            try {
+                const res = await fetch(`/api/blockchain?date=${encodeURIComponent(selectedBlockchainDate)}`);
+                if (!res.ok) return;
+                const data = await res.json();
+                if (data.status === 'success') {
+                    fullBlockchainBlocks = data.blocks || [];
+                    updateBlockchainUI(data);
+                }
+            } catch (err) {
+                console.error("Error fetching blockchain ledger:", err);
+            }
+        }
+
+        function updateBlockchainUI(data) {
+            const totalBlocks = data.total_blocks || 0;
+            safeSetText('blockchain-block-height', `Block #${totalBlocks}`);
+
+            const dateFilterSelect = document.getElementById('blockchain-date-filter');
+            if (dateFilterSelect && data.available_dates) {
+                const currentVal = dateFilterSelect.value;
+                dateFilterSelect.innerHTML = `<option value="ALL">All Dates (Full Ledger · ${totalBlocks} Blocks)</option>`;
+                data.available_dates.forEach(item => {
+                    const label = `${item.date} (${item.count} Blocks)${item.is_today ? ' · Today' : ''}`;
+                    const opt = document.createElement('option');
+                    opt.value = item.date;
+                    opt.innerText = label;
+                    if (item.date === selectedBlockchainDate) {
+                        opt.selected = true;
+                    }
+                    dateFilterSelect.appendChild(opt);
+                });
+                if (currentVal && dateFilterSelect.querySelector(`option[value="${currentVal}"]`)) {
+                    dateFilterSelect.value = currentVal;
+                }
+            }
+
+            const logBody = document.getElementById('action-log-rows');
+            if (!logBody) return;
+
+            const blocks = data.blocks || [];
+            if (blocks.length === 0) {
+                logBody.innerHTML = `<tr><td colspan="8" style="color: var(--text-muted); text-align: center;">No automated shedding actions recorded yet. System operating normally.</td></tr>`;
+                return;
+            }
+
+            logBody.innerHTML = '';
+            blocks.forEach(b => {
+                const shortHash = b.hash ? `${b.hash.substring(0, 8)}...${b.hash.substring(b.hash.length - 6)}` : '0x000...';
+                
+                let tagClass = 'tag-shed';
+                const act = (b.action_type || '').toUpperCase();
+                if (act.includes('PWM') || act.includes('DIM')) tagClass = 'tag-dim';
+                else if (act.includes('RESTORE')) tagClass = 'tag-restore';
+                else if (act.includes('GENESIS')) tagClass = 'tag-genesis';
+                else if (act.includes('OVERRIDE')) tagClass = 'tag-override';
+                else if (act.includes('SPIKE')) tagClass = 'tag-spike';
+
+                const row = `<tr>
+                    <td>
+                        <div style="font-weight: bold; color: var(--accent-blue);">#${b.index}</div>
+                        <span class="hash-code" title="${b.hash}" onclick="inspectBlock(${b.index})">${shortHash}</span>
+                    </td>
+                    <td>
+                        <div style="font-weight: 500;">${b.timestamp}</div>
+                        <div style="font-size: 0.72rem; color: var(--text-muted);">${b.date}</div>
+                    </td>
+                    <td><span class="action-tag ${tagClass}">${b.action_type}</span></td>
+                    <td><strong>${b.target_device || b.device_id}</strong></td>
+                    <td class="score-highlight">${(b.shed_score && b.shed_score > 0) ? b.shed_score : '-'}</td>
+                    <td style="max-width: 280px;">${b.reason}</td>
+                    <td>
+                        ${b.demand_relief_w > 0 
+                            ? `<span style="color: var(--accent-green); font-weight: bold;">-${b.demand_relief_w} W</span>` 
+                            : '<span style="color: var(--text-muted);">-</span>'}
+                    </td>
+                    <td>
+                        <button class="btn btn-blue" style="padding: 2px 8px; font-size: 0.72rem;" onclick="inspectBlock(${b.index})">
+                            🔒 Proof
+                        </button>
+                    </td>
+                </tr>`;
+                logBody.innerHTML += row;
+            });
+        }
+
+        function onDateFilterChanged(newDate) {
+            selectedBlockchainDate = newDate;
+            showToast(`📅 Filter applied: ${newDate === 'ALL' ? 'All Dates' : newDate}`);
+            fetchBlockchainLedger();
+        }
+
+        async function verifyBlockchainIntegrity() {
+            try {
+                const res = await fetch('/api/blockchain/verify');
+                const data = await res.json();
+                const ver = data.verification || {};
+
+                let content = '';
+                if (ver.is_valid) {
+                    content = `
+                        <div style="background: rgba(34, 197, 94, 0.15); border: 1px solid #22c55e; border-radius: 8px; padding: 14px; margin-bottom: 14px;">
+                            <div style="font-size: 1.1rem; font-weight: bold; color: #4ade80;">
+                                ✔️ 100% Cryptographic Integrity Validated
+                            </div>
+                            <div style="color: #bbf7d0; font-size: 0.85rem; margin-top: 4px;">
+                                Zero hash mismatches found across all ${ver.total_blocks} chained blocks.
+                            </div>
+                        </div>
+                        <table style="width: 100%; font-size: 0.85rem;">
+                            <tr><td style="color: var(--text-muted);">Algorithm:</td><td><strong>${ver.algorithm}</strong></td></tr>
+                            <tr><td style="color: var(--text-muted);">Total Chained Blocks:</td><td><strong style="color: var(--accent-blue);">${ver.total_blocks}</strong></td></tr>
+                            <tr><td style="color: var(--text-muted);">Chain Tip Hash:</td><td><span class="hash-code">${ver.last_hash}</span></td></tr>
+                            <tr><td style="color: var(--text-muted);">Verification Timestamp:</td><td>${ver.verified_at}</td></tr>
+                            <tr><td style="color: var(--text-muted);">Tamper-Proof Status:</td><td><span class="chain-badge">IMMUTABLE & SECURE</span></td></tr>
+                        </table>
+                    `;
+                } else {
+                    content = `
+                        <div style="background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; border-radius: 8px; padding: 14px;">
+                            <div style="font-size: 1.1rem; font-weight: bold; color: #f87171;">
+                                ⚠️ Chain Integrity Failure Detected
+                            </div>
+                            <div style="color: #fecaca; font-size: 0.85rem; margin-top: 4px;">
+                                ${ver.error || 'Block hash integrity compromised!'}
+                            </div>
+                        </div>
+                    `;
+                }
+
+                document.getElementById('modalVerifyBody').innerHTML = content;
+                openModal('verifyModal');
+            } catch (err) {
+                console.error("Integrity check error:", err);
+                showToast("❌ Verification Failed");
+            }
+        }
+
+        async function inspectBlock(blockIndex) {
+            try {
+                const res = await fetch(`/api/blockchain/block/${blockIndex}`);
+                const data = await res.json();
+                if (data.status === 'success' && data.block) {
+                    const b = data.block;
+                    const jsonPayload = JSON.stringify(b.data || {}, null, 2);
+                    
+                    document.getElementById('modalBlockTitle').innerText = `🛡️ Block #${b.index} Cryptographic Inspector`;
+                    document.getElementById('modalBlockBody').innerHTML = `
+                        <table style="width: 100%; font-size: 0.85rem; margin-bottom: 14px;">
+                            <tr><td style="color: var(--text-muted); width: 140px;">Block Index:</td><td><strong style="color: var(--accent-blue);">#${b.index}</strong></td></tr>
+                            <tr><td style="color: var(--text-muted);">Timestamp:</td><td>${b.timestamp} (${b.date})</td></tr>
+                            <tr><td style="color: var(--text-muted);">Action Type:</td><td><span class="action-tag tag-shed">${b.action_type}</span></td></tr>
+                            <tr><td style="color: var(--text-muted);">Target Device:</td><td><strong>${b.target_device || b.device_id}</strong></td></tr>
+                            <tr><td style="color: var(--text-muted);">Shed-Score:</td><td><strong style="color: var(--accent-yellow);">${b.shed_score || 0.0}</strong></td></tr>
+                            <tr><td style="color: var(--text-muted);">Algorithmic Rationale:</td><td>${b.reason}</td></tr>
+                            <tr><td style="color: var(--text-muted);">Demand Relief:</td><td><strong style="color: var(--accent-green);">${b.demand_relief_w} W</strong></td></tr>
+                            <tr><td style="color: var(--text-muted);">Previous Hash:</td><td><span class="hash-code" style="word-break: break-all;">${b.previous_hash}</span></td></tr>
+                            <tr><td style="color: var(--text-muted);">Current SHA-256:</td><td><span class="hash-code" style="word-break: break-all; color: #4ade80;">${b.hash}</span></td></tr>
+                            <tr><td style="color: var(--text-muted);">Nonce / Proof:</td><td>${b.nonce}</td></tr>
+                            <tr><td style="color: var(--text-muted);">Validator Node:</td><td>${b.validator}</td></tr>
+                        </table>
+                        <div style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase;">Raw Block Merkle Payload (JSON):</div>
+                        <pre style="background: #090d16; border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; font-size: 0.78rem; overflow-x: auto; color: var(--accent-blue);">${jsonPayload}</pre>
+                    `;
+                    openModal('blockModal');
+                }
+            } catch (err) {
+                console.error("Inspect block error:", err);
+            }
+        }
+
+        function exportImmutableLedger() {
+            if (!fullBlockchainBlocks || fullBlockchainBlocks.length === 0) {
+                showToast("⚠️ No blocks in ledger to export");
+                return;
+            }
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(fullBlockchainBlocks, null, 2));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", `HTH-IT-06-blockchain-ledger-${new Date().toISOString().slice(0,10)}.json`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+            showToast("📥 Exported Blockchain Ledger JSON");
+        }
+
+        // --- DASHBOARD UI STATE SYNC ---
+        function applyStateToUI(state, config) {
+            // Update System Status Badge
+            const statusEl = document.getElementById('system-status-badge');
+            if (statusEl) {
+                const status = state.system_status || 'NORMAL';
+                statusEl.className = 'badge-pill';
+                if (status === 'NORMAL') {
+                    statusEl.classList.add('bg-normal');
+                    statusEl.innerText = 'SYSTEM STATUS: NORMAL';
+                } else if (status === 'PEAK_RISK') {
+                    statusEl.classList.add('bg-risk');
+                    statusEl.innerText = '⚠️ PEAK LOAD RISK';
+                } else if (status === 'SHEDDING_ACTIVE') {
+                    statusEl.classList.add('bg-shedding');
+                    statusEl.innerText = '⚡ SHEDDING ACTIVE';
+                } else if (status === 'MANUAL_OVERRIDE') {
+                    statusEl.classList.add('bg-override');
+                    statusEl.innerText = '⚙️ MANUAL OVERRIDE';
+                }
+            }
+
+            // Update ToD Slot Badge
+            const todBadge = document.getElementById('tod-slot-badge');
+            if (todBadge) {
+                todBadge.innerText = state.active_tod_slot || 'NORMAL HOURS';
+            }
+
+            // Update KPIs
+            const totalP = (state.total_power || 0.0).toFixed(1);
+            const predP = (state.predicted_power || 0.0).toFixed(1);
+            const railV = (state.rail_voltage || 12.0).toFixed(2);
+            const cap = (state.peak_cap_watts || 45.0).toFixed(1);
+            const kwh = (state.total_kwh_consumed || 0.0).toFixed(4);
+            const cost = (state.total_cost_consumed_inr || 0.0).toFixed(4);
+            const rate = (state.active_tariff_rate_inr || 7.50).toFixed(3);
+            const savedCost = (state.total_cost_saved_inr || 0.0).toFixed(4);
+            const savedKwh = (state.total_energy_saved_kwh || 0.0).toFixed(4);
+
+            safeSetText('kpi-total-power', `${totalP} W`);
+            safeSetText('kpi-rail-voltage', `Rail: ${railV} V`);
+            safeSetText('kpi-predicted-power', `${predP} W`);
+            safeSetText('kpi-cap-limit', `Cap: ${cap} W`);
+            safeSetText('kpi-kwh-consumed', `${kwh} kWh`);
+            safeSetText('kpi-cost-consumed', `₹${cost}`);
+            safeSetText('kpi-active-rate', `Rate: ₹${rate} / kWh`);
+            safeSetText('kpi-cost-saved', `₹${savedCost}`);
+            safeSetText('kpi-energy-saved', `${savedKwh} kWh saved`);
+
+            // Update Live Impact Strip
+            safeSetText('impact-active-rate', `₹${rate} / kWh`);
+            safeSetText('impact-hourly-cost', `₹${(state.hourly_cost_inr || 0.0).toFixed(3)} / hr`);
+            safeSetText('impact-demand-charge', `₹${(state.monthly_demand_charge_inr || 3040.0).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})} / mo`);
+            safeSetText('impact-projected-bill', `₹${(state.monthly_projected_cost_inr || 3265.71).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})} / mo`);
+
+            // Sync Peak Cap Slider & Input if user is not currently dragging it
+            if (!isUserAdjustingSlider) {
+                const curCap = state.peak_cap_watts || 45.0;
+                safeSetText('display-cap-val', `${curCap.toFixed(1)} W`);
+                const slider = document.getElementById('slider-peak-cap');
+                const numInput = document.getElementById('input-limit');
+                if (slider && parseFloat(slider.value) !== curCap) slider.value = curCap;
+                if (numInput && parseFloat(numInput.value) !== curCap) numInput.value = curCap;
+                updatePresetChips(curCap);
+            }
+
+            // Sync Active Tariff Card Highlight
+            const activeCategory = config.tariff_category || 'HT-I';
+            if (activeCategory !== currentActiveTariff) {
+                currentActiveTariff = activeCategory;
+                document.querySelectorAll('.tariff-card').forEach(card => card.classList.remove('active'));
+                const card = document.getElementById(`tariff-card-${activeCategory}`);
+                if (card) card.classList.add('active');
+            }
+
+            // Update Chart Data
+            const ts = state.timestamp || new Date().toLocaleTimeString();
+            chartData.labels.push(ts);
+            chartData.datasets[0].data.push(parseFloat(totalP));
+            chartData.datasets[1].data.push(parseFloat(predP));
+            chartData.datasets[2].data.push(parseFloat(cap));
+
+            if (chartData.labels.length > maxPoints) {
+                chartData.labels.shift();
+                chartData.datasets[0].data.shift();
+                chartData.datasets[1].data.shift();
+                chartData.datasets[2].data.shift();
+            }
+            powerChart.update();
+
+            // Render Device Cards
+            const devContainer = document.getElementById('device-cards-container');
+            if (devContainer && state.devices) {
+                devContainer.innerHTML = '';
+                for (const [devId, dev] of Object.entries(state.devices)) {
+                    const card = document.createElement('div');
+                    card.className = `device-card ${!dev.is_shiftable ? 'critical' : ''} ${dev.state === 'OFF' ? 'shedded' : ''}`;
+                    
+                    let statusBadgeClass = 'bg-normal';
+                    if (dev.state === 'OFF') statusBadgeClass = 'bg-shedding';
+                    else if (dev.state.includes('DIMMED')) statusBadgeClass = 'bg-risk';
+
+                    card.innerHTML = `
+                        <div class="device-header">
+                            <div>
+                                <span class="device-name">${dev.name}</span>
+                                <span class="gpio-tag">GPIO ${dev.gpio_status_led || '-'}</span>
+                            </div>
+                            <span class="badge-pill ${statusBadgeClass}" style="font-size: 0.7rem; padding: 2px 8px;">${dev.state}</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
+                            <span style="font-size: 1.4rem; font-weight: bold; color: var(--accent-blue);">${dev.power.toFixed(1)} W</span>
+                            <span style="font-size: 0.85rem; color: var(--text-muted);">${dev.current.toFixed(2)} A</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 6px;">
+                            <span>Consumed: <strong style="color: var(--accent-orange);">${(dev.kwh_consumed || 0.0).toFixed(4)} kWh</strong></span>
+                            <span>Cost: <strong style="color: #f87171;">₹${(dev.cost_inr || 0.0).toFixed(4)}</strong></span>
+                        </div>
+                        <div style="font-size: 0.75rem; color: var(--text-muted); display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-color); padding-top: 8px; margin-top: 8px;">
+                            <span>Shed Score: <strong class="score-highlight">${dev.is_shiftable ? (dev.shed_score > 0 ? dev.shed_score : 0.0) : 'CRITICAL (PROTECTED)'}</strong></span>
+                            ${!dev.is_shiftable 
+                                ? `<span style="color: var(--accent-orange); font-size: 0.7rem; font-weight: bold;">🔒 UNTOUCHABLE</span>` 
+                                : `<div style="display: flex; gap: 4px;">
+                                     <button class="btn" style="padding: 3px 6px; font-size: 0.7rem;" onclick="controlDevice('${devId}', 'SHED')">Shed</button>
+                                     <button class="btn" style="padding: 3px 6px; font-size: 0.7rem;" onclick="controlDevice('${devId}', 'RESTORE')">Restore</button>
+                                   </div>`
+                            }
+                        </div>
+                    `;
+                    devContainer.appendChild(card);
+                }
+            }
+        }
+
+        // --- DASHBOARD UPDATE LOOP ---
+        async function updateDashboard() {
+            try {
+                const response = await fetch('/api/telemetry');
+                if (!response.ok) return;
+                const data = await response.json();
+                applyStateToUI(data.state || {}, data.config || {});
+            } catch (err) {
+                console.error("Dashboard refresh error:", err);
+            }
+        }
+
+        async function triggerLoadSpike() {
+            await fetch('/api/control', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'TRIGGER_SPIKE' })
+            });
+            showToast("⚡ Injected 8s Power Surge");
+            setTimeout(fetchBlockchainLedger, 500);
+        }
+
+        async function toggleOverride() {
+            const res = await fetch('/api/control', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'OVERRIDE_TOGGLE' })
+            });
+            const data = await res.json();
+            showToast(`⚙️ Override Mode: ${data.override ? 'ENABLED' : 'DISABLED'}`);
+            setTimeout(fetchBlockchainLedger, 500);
+        }
+
+        async function silenceBuzzer() {
+            await fetch('/api/control', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'SILENCE_BUZZER' })
+            });
+            showToast("🔕 Buzzer Silenced");
+            setTimeout(fetchBlockchainLedger, 500);
+        }
+
+        async function restoreAllLoads() {
+            await fetch('/api/control', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'RESTORE_ALL' })
+            });
+            showToast("🔄 All Shiftable Loads Restored");
+            setTimeout(fetchBlockchainLedger, 500);
+        }
+
+        async function controlDevice(devId, action) {
+            await fetch('/api/control', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: action, device_id: devId })
+            });
+            setTimeout(fetchBlockchainLedger, 500);
+        }
+
+        setInterval(updateDashboard, 1000);
+        setInterval(fetchBlockchainLedger, 2000);
+        
+        updateDashboard();
+        fetchBlockchainLedger();
+    </script>
+</body>
+</html>
